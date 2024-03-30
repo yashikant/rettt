@@ -1,0 +1,147 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Voice Assistant</title>
+    <style>
+        body {
+            font-family: 'Arial', sans-serif;
+            background-color: #f4f4f4;
+            margin: 0;
+            padding: 0;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            height: 100vh;
+        }
+        #assistant-container {
+            background-color: #fff;
+            border-radius: 10px;
+            box-shadow: 0 5px 25px rgba(0, 0, 0, 0.2);
+            padding: 20px;
+            width: 350px;
+            text-align: center;
+            transition: transform 0.3s ease-in-out;
+        }
+        #assistant-container:hover {
+            transform: scale(1.05);
+        }
+        h1 {
+            font-size: 24px;
+            color: #333;
+        }
+        button {
+            background-color: #008CBA;
+            color: white;
+            padding: 10px 20px;
+            margin: 10px;
+            border: none;
+            border-radius: 5px;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s ease-in-out;
+        }
+        button:hover {
+            background-color: #005f73;
+        }
+        #recording-instructions {
+            margin-top: 20px;
+            font-size: 14px;
+            color: #666;
+        }
+        #transcript {
+            margin-top: 20px;
+            padding: 10px;
+            border: 1px solid #ddd;
+            background-color: #f9f9f9;
+            min-height: 50px;
+        }
+    </style>
+</head>
+<body>
+    <div id="assistant-container">
+        <h1>My Voice Assistant</h1>
+        <button id="start-record-btn" title="Start Recording">Start Recognition</button>
+        <button id="stop-record-btn" title="Stop Recording" style="display:none;">Stop Recognition</button>
+        <p id="recording-instructions">Press the Start Recording button and allow access to your microphone.</p>
+        <div id="transcript"></div>
+    </div>
+
+    <script>
+        // Check for browser support for speech recognition
+        window.SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+
+        // Create a new instance of SpeechRecognition
+        const recognition = new SpeechRecognition();
+        recognition.interimResults = true;
+        recognition.lang = 'en-US';
+
+        // DOM elements
+        const startRecordButton = document.getElementById('start-record-btn');
+        const stopRecordButton = document.getElementById('stop-record-btn');
+        const recordingInstructions = document.getElementById('recording-instructions');
+        const transcriptDisplay = document.getElementById('transcript');
+
+        // Event listeners for the start button
+        startRecordButton.addEventListener('click', () => {
+            recognition.start();
+            startRecordButton.style.display = 'none';
+            stopRecordButton.style.display = 'inline-block';
+            recordingInstructions.textContent = 'Voice recognition activated. Try speaking into the microphone.';
+            transcriptDisplay.textContent = '';
+        });
+
+        // Event listeners for the stop button
+        stopRecordButton.addEventListener('click', () => {
+            recognition.stop();
+            stopRecordButton.style.display = 'none';
+            startRecordButton.style.display = 'inline-block';
+            recordingInstructions.textContent = 'Voice recognition stopped.';
+        });
+
+        recognition.addEventListener('result', (e) => {
+            const transcript = Array.from(e.results)
+                .map(result => result[0])
+                .map(result => result.transcript)
+                .join('');
+
+            transcriptDisplay.textContent = transcript;
+
+            if (e.results[0].isFinal) {
+                // Send the final transcript to the Flask server
+                fetch('/process-command', {
+                    method: 'POST',
+                    headers: {
+                        'Content-Type': 'application/json'
+                    },
+                    body: JSON.stringify({ command: transcript })
+                })
+                .then(response => {
+                    if (!response.ok) {
+                        throw new Error('Network response was not ok: ' + response.statusText);
+                    }
+                    return response.json();
+                })
+                .then(data => {
+                    recordingInstructions.textContent = data.message;
+                    // You can update the UI with the response here
+                })
+                .catch(error => {
+                    recordingInstructions.textContent = 'Error occurred in voice recognition: ' + error;
+                    recognition.start(); // Restart recognition after encountering an error
+                });
+            }
+        });
+
+        recognition.addEventListener('end', () => {
+            stopRecordButton.click(); // Automatically click the stop button when recognition ends
+        });
+
+        recognition.addEventListener('error', (e) => {
+            recordingInstructions.textContent = 'An error occurred in voice recognition: ' + e.error;
+            recognition.start(); // Restart recognition after encountering an error
+        });
+    </script>
+</body>
+</html>
